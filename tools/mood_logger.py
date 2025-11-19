@@ -1,15 +1,19 @@
 import datetime
-from google.adk.agents import LlmAgent
+import os
+from tinydb import TinyDB, Query
 from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
-from tinydb import TinyDB, Query
 
-# --- Long-term Database ---
-  
-db = TinyDB('user_memory.json')
+# --- 1. Setup Database Path ---
+# This ensures the JSON file is created in the ROOT folder, not inside /tools
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, 'user_memory.json')
+
+# --- 2. Initialize Database ---
+db = TinyDB(DB_PATH, indent=4, separators=(',', ': '))
 mood_table = db.table('mood_history')
 
-# ---Mood Saving Tool ---
+# --- 3. Define the Tool Function ---
 def save_mood_to_state(tool_context: ToolContext, mood: str, burnout_score: int):
     """Saves the user's detected mood and burnout score to session and long-term memory."""
     
@@ -35,28 +39,9 @@ def save_mood_to_state(tool_context: ToolContext, mood: str, burnout_score: int)
             'burnout_score': burnout_score
         })
         
-    print(f"--- 💾 Memory Saved: '{mood}' to user_memory.json ---")
+    print(f"--- 💾 Memory Saved: '{mood}' to {DB_PATH} ---")
     return f"Mood saved: {mood}"
 
-# Wrap the function in the ADK's FunctionTool
-mood_tool = FunctionTool(
-    fn=save_mood_to_state, 
-    name="save_mood_to_state", 
-    description="Saves the user's mood and burnout score to memory."
-)
-
-# --- Emotion Checker Agent --- 
-emotion_checker_agent = LlmAgent(
-    model="gemini-1.5-flash",
-    name="EmotionCheckerAgent",
-    description="Analyzes user text for emotion, stress, and burnout.",
-    instruction="""
-    You are an empathetic emotion classifier. 
-    Analyze the user's text. First, classify their mood (e.g., 'tired', 'stressed', 'focused', 'neutral').
-    Second, estimate a burnout score from 1-10 (1=low, 10=high).
-    You MUST call the `save_mood_to_state` tool with your findings.
-    Do NOT respond to the user, just call the tool.
-    """,
-    tools=[mood_tool]
-)
-root_agent = emotion_checker_agent
+# --- 4. Export the Tool ---
+# The agent will import this variable
+mood_tool = FunctionTool(save_mood_to_state)
