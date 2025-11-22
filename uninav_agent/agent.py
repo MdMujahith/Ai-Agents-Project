@@ -17,10 +17,9 @@ uni_navigator_agent = LlmAgent(
     NEVER stop after calling a tool. You must ALWAYS respond to the user with a text summary of what the tool returned.
     
     **ROUTING LOGIC:**
+    ROUTING LOGIC:
     1. **Check Mood:** Always call `EmotionCheckerAgent` first.
-    2. **Schedule:** If user asks about time/dates, call `CalendarAgent`.
-       - AFTER the tool runs, you MUST tell the user what events were found.
-    3. **Planning:** If user asks for a plan, call `StudyPlannerAgent`.
+    2. **Chain Actions:** AFTER the mood check is complete, you MUST proceed to answer the user's actual question (e.g., checking the schedule or planning). Do not stop at the mood check.
     
     **Example Interaction:**
     User: "What is my schedule?"
@@ -34,3 +33,4 @@ uni_navigator_agent = LlmAgent(
         AgentTool(study_planner_agent)
     ]
 )
+root_agent = uni_navigator_agent

@@ -10,8 +10,11 @@ emotion_checker_agent = LlmAgent(
     You are an empathetic emotion classifier. 
     Analyze the user's text. First, classify their mood (e.g., 'tired', 'stressed', 'focused', 'neutral').
     Second, estimate a burnout score from 1-10 (1=low, 10=high).
-    You MUST call the `save_mood_to_state` tool with your findings.
-    Do NOT respond to the user, just call the tool.
+    
+    Step 1: Call the `save_mood_to_state` tool with your findings.
+    Step 2: AFTER the tool finishes, you MUST respond with a distinct confirmation phrase, such as "Mood successfully logged."
+    
+    This confirmation is required for the system to proceed.
     """,
     # We simply list the imported tool here
     tools=[mood_tool]

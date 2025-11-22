@@ -7,8 +7,8 @@
         },
         "3": {
             "date": "2025-11-22",
-            "mood": "neutral",
-            "burnout_score": 1
+            "mood": "tired",
+            "burnout_score": 7
         }
     }
 }
