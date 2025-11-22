@@ -6,104 +6,144 @@ import google.generativeai as genai
 from google.genai import types
 from dotenv import load_dotenv
 
-# --- 1. Import the Runner ---
+# Try imports for different ADK versions
 try:
     from google.adk.runners import InMemoryRunner
 except ImportError:
     from google.adk.core.runner import Runner as InMemoryRunner
 
-# --- 2. Import your Root Agent ---
 try:
     from uninav_agent.agent import uni_navigator_agent
 except ImportError as e:
-    print(f"❌ Error importing agents: {e}")
+    print(f"❌ Agent import failed: {e}")
     sys.exit(1)
 
+
+async def handle_model_event(event, runner, session_id, user_id):
+    """
+    Handles ALL types of streaming responses:
+    - Text chunks
+    - Candidate results
+    - Tool calls
+    - Final replies after tools
+    """
+
+    # 1️⃣ Standard text streaming (post-tool)
+    if hasattr(event, "text") and event.text:
+        print(event.text, end='', flush=True)
+
+    # 2️⃣ Direct content streaming
+    if hasattr(event, "content") and event.content:
+        for part in event.content.parts:
+            if hasattr(part, "stream_text") and part.stream_text:
+                print(part.stream_text, end='', flush=True)
+            elif hasattr(part, "text") and part.text:
+                print(part.text, end='', flush=True)
+
+    # 3️⃣ Candidate response + tool call detection
+    candidates = getattr(event, "candidates", [])
+    for candidate in candidates:
+        parts = getattr(candidate.content, "parts", [])
+
+        for part in parts:
+
+            # Normal text responses
+            if hasattr(part, "text") and part.text:
+                print(part.text, end='', flush=True)
+
+            # Tool calls when LLM decides to use a function
+            if hasattr(part, "function_call") and part.function_call:
+                fn = part.function_call
+
+                print(f"\n\n--- 🔧 TOOL CALL: {fn.name} ---")
+                print(f"Args: {fn.args}")
+
+                try:
+                    # Execute tool
+                    tool_result = await runner.tool_service.call(
+                        session_id=session_id,
+                        user_id=user_id,
+                        name=fn.name,
+                        arguments=fn.args
+                    )
+                except Exception as e:
+                    print(f"\n❌ Tool failed: {e}")
+                    return
+
+                # Send tool result back to model
+                async for follow_up_event in runner.run_tool_response(
+                    session_id=session_id,
+                    user_id=user_id,
+                    tool_response=tool_result
+                ):
+                    await handle_model_event(follow_up_event, runner, session_id, user_id)
+
+
 async def main():
-    # --- Setup ---
     load_dotenv()
     api_key = os.getenv("GEMINI_API_KEY")
+
     if not api_key:
-        print("❌ Error: GEMINI_API_KEY not found.")
+        print("❌ ERROR: GEMINI_API_KEY missing in .env file.")
         return
 
-    try:
-        genai.configure(api_key=api_key)
-    except Exception as e:
-        print(f"❌ Error configuring API: {e}")
-        return
+    genai.configure(api_key=api_key)
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 60)
     print("🎓 UniNavigation Agent is ONLINE")
-    print("   Type 'exit' to stop.")
-    print("="*50 + "\n")
+    print("💬 Type 'exit' to quit")
+    print("=" * 60 + "\n")
 
-    # --- 3. Initialize Runner ---
-    # Ensure app_name matches the agent's expectation ("agents")
     runner = InMemoryRunner(agent=uni_navigator_agent, app_name="agents")
     
-    user_id = "user_01" 
-    # FIX: Generate a session ID manually
+    user_id = "user_01"
     session_id = str(uuid.uuid4())
 
-    # --- 4. Explicitly Create Session with known ID ---
+    # Create a session
     try:
-        # We try to create the session with our explicit ID first.
-        # This ensures it exists before we try to run it.
         await runner.session_service.create_session(
             app_name="agents",
             user_id=user_id,
-            session_id=session_id 
+            session_id=session_id
         )
-    except AttributeError:
-        # If create_session doesn't exist or fails, we proceed.
-        # Some runner versions create it lazily on the first run().
-        pass
-    except Exception as e:
-        # If it fails for another reason (e.g. session exists), just log and continue
-        # print(f"Session creation note: {e}") 
+    except Exception:
         pass
 
-    # --- 5. The Chat Loop ---
+    # Chat loop
     while True:
         try:
-            user_text = input("\nStudent: ").strip()
-            
-            if user_text.lower() in ["exit", "quit", "bye"]:
+            user_input = input("\nStudent: ").strip()
+
+            if user_input.lower() in ["exit", "quit"]:
                 print("\n👋 Goodbye!")
                 break
-            
-            if not user_text:
+
+            if not user_input:
                 continue
 
-            print("🤖 Agent thinking...", end="\r")
-            
-            # Prepare the Message
-            message_content = types.Content(
+            print("🤖 Agent: ", end="", flush=True)
+
+            message = types.Content(
                 role="user",
-                parts=[types.Part.from_text(text=user_text)]
+                parts=[types.Part.from_text(text=user_input)]
             )
 
-            full_response = ""
-            
-            # --- 6. Run Async ---
-            # We pass the explicit session_id we generated/created.
+            # Main streaming call
             async for event in runner.run_async(
-                session_id=session_id, 
-                user_id=user_id, 
-                new_message=message_content
+                session_id=session_id,
+                user_id=user_id,
+                new_message=message
             ):
-                if hasattr(event, 'text') and event.text:
-                    full_response += event.text
-            
-            print(f"\r🤖 Agent: {full_response}\n")
-            print("-" * 30)
+                await handle_model_event(event, runner, session_id, user_id)
+
+            print("\n" + "-" * 60)
 
         except KeyboardInterrupt:
-            print("\nForce quit.")
+            print("\n⛔ Force Quit")
             break
         except Exception as e:
-            print(f"\n❌ Error: {e}\n")
+            print(f"\n❌ Runtime Error: {e}\n")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
