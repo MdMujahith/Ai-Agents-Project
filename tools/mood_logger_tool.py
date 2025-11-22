@@ -21,7 +21,9 @@ def save_mood_to_state(tool_context: ToolContext, mood: str, burnout_score: int)
     print(f"\n--- 💡 TOOL CALLED: save_mood_to_state(mood={mood}, score={burnout_score}) ---")
     
     # --- Write to SHORT-TERM memory (for this session) ---
-    tool_context.state["current_mood"] = mood 
+    # Note: tool_context.state is a dict-like object for the current session
+    if tool_context and hasattr(tool_context, 'state'):
+        tool_context.state["current_mood"] = mood 
     
     # --- Write to LONG-TERM memory (the "Digital Twin" DB) ---
     Mood = Query()
@@ -40,6 +42,8 @@ def save_mood_to_state(tool_context: ToolContext, mood: str, burnout_score: int)
         })
         
     print(f"--- 💾 Memory Saved: '{mood}' to {DB_PATH} ---")
+    
+    # 🚨 CRITICAL FIX: Returning a string to the Agent prevents the "NoneType" error
     return f"Mood saved: {mood}"
 
 # --- 4. Export the Tool ---

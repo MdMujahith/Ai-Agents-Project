@@ -1,8 +1,8 @@
 from google.adk.agents import LlmAgent
-from tools.mood_logger import mood_tool 
+from tools.mood_logger_tool import mood_tool 
 
 # --- Emotion Checker Agent --- 
-agent = LlmAgent(
+emotion_checker_agent = LlmAgent(
     model="gemini-2.5-flash-lite",
     name="EmotionCheckerAgent",
     description="Analyzes user text for emotion, stress, and burnout.",
@@ -18,4 +18,4 @@ agent = LlmAgent(
 )
 
 # --- CRITICAL: Expose the agent as 'root_agent' for ADK Web ---
-root_agent = agent
+#root_agent = emotion_checker_agent
